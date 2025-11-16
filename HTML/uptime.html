@@ -1,0 +1,396 @@
+// CANVAS
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Disney Rides Uptime — Canvas Visualizer</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa6bd;
+      --accent:#3b82f6;
+      --good:#16a34a;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#07101a);color:#e6eef8}
+    .app{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+    h1{font-size:20px;margin:0}
+    .controls{margin-left:auto;display:flex;gap:10px;align-items:center}
+    input[type=text]{background:var(--card);border:1px solid rgba(255,255,255,0.04);padding:8px 10px;border-radius:8px;color:var(--muted);min-width:360px}
+    button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .meta{margin-top:8px;color:var(--muted);font-size:13px}
+    .canvas-wrap{background:var(--glass);border-radius:14px;padding:18px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+    canvas{display:block;width:100%;height:480px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    .legend{display:flex;gap:10px;align-items:center}
+    .legend .item{display:flex;gap:6px;align-items:center}
+    .dot{width:12px;height:12px;border-radius:50%}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Disney Rides Uptime — Canvas Visualizer</h1>
+        <div class="meta">Provide an API endpoint that returns JSON like:<br><code>[{ id, name, uptime (0-100), lastChecked }]</code></div>
+      </div>
+
+      <div class="controls">
+        <input id="endpoint" type="text" placeholder="API endpoint (e.g. /api/rides)" value="/api/rides" />
+        <input id="poll" type="text" placeholder="poll interval sec" value="30" style="width:82px" />
+        <button id="fetchBtn">Fetch Now</button>
+        <button id="demoBtn" class="secondary">Load Demo</button>
+      </div>
+    </header>
+
+    <div class="canvas-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <footer style="display:flex;justify-content:space-between;align-items:center">
+      <div class="legend">
+        <div class="item"><span class="dot" style="background:var(--good)"></span> ≥ 99%</div>
+        <div class="item"><span class="dot" style="background:var(--warn)"></span> 95–99%</div>
+        <div class="item"><span class="dot" style="background:var(--bad)"></span> &lt; 95%</div>
+      </div>
+      <div class="meta">Tip: Hover a bubble for details. Click a bubble to pin info.</div>
+    </footer>
+  </div>
+
+<script>
+// Disney Rides Uptime Canvas Visualizer
+// Expects API JSON: [{ id: string|number, name: string, uptime: number (0-100), lastChecked?: ISOString, notes?: string }]
+
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+let DPR = Math.max(1, window.devicePixelRatio || 1);
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.floor(rect.width * DPR);
+  canvas.height = Math.floor(rect.height * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', () => { resizeCanvas(); draw(); });
+resizeCanvas();
+
+// UI
+const endpointEl = document.getElementById('endpoint');
+const fetchBtn = document.getElementById('fetchBtn');
+const demoBtn = document.getElementById('demoBtn');
+const pollEl = document.getElementById('poll');
+
+fetchBtn.addEventListener('click', () => fetchAndRender(endpointEl.value.trim()));
+demoBtn.addEventListener('click', () => {
+  useDemo = true; clearPinned(); fetchAndRenderDemo();
+});
+
+let data = [];
+let layout = { bubbles: [] };
+let hoverIndex = -1;
+let pinned = null;
+let useDemo = false;
+let pollTimer = null;
+
+function clearPinned() { pinned = null; }
+
+async function fetchAndRender(url) {
+  useDemo = false;
+  if (!url) return alert('Please enter an endpoint URL');
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!Array.isArray(json)) throw new Error('Expected JSON array');
+    data = json.map(normalize);
+    layout = computeLayout(data);
+    draw();
+  } catch (err) {
+    console.error('Fetch error', err);
+    alert('Failed to fetch: ' + err.message + '\nFalling back to demo data');
+    fetchAndRenderDemo();
+  }
+}
+
+function normalize(item) {
+  return {
+    id: item.id ?? (item.name || Math.random()).toString(),
+    name: String(item.name || 'Unnamed'),
+    uptime: Math.max(0, Math.min(100, Number(item.uptime) || 0)),
+    lastChecked: item.lastChecked || null,
+    notes: item.notes || ''
+  };
+}
+
+// Demo
+function fetchAndRenderDemo() {
+  useDemo = true;
+  data = [
+    { id:1, name:'Space Mountain', uptime:99.9, lastChecked:new Date().toISOString() },
+    { id:2, name:'Pirates of the Caribbean', uptime:98.6, lastChecked:new Date().toISOString() },
+    { id:3, name:'Haunted Mansion', uptime:92.4, lastChecked:new Date().toISOString() },
+    { id:4, name:'Jungle Cruise', uptime:97.1, lastChecked:new Date().toISOString() },
+    { id:5, name:'Splash Mountain', uptime:89.3, lastChecked:new Date().toISOString() },
+    { id:6, name:'Big Thunder Mountain', uptime:99.2, lastChecked:new Date().toISOString() },
+    { id:7, name:'Seven Dwarfs Mine Train', uptime:96.7, lastChecked:new Date().toISOString() },
+  ].map(normalize);
+  layout = computeLayout(data);
+  draw();
+}
+
+// Polling
+// Polling in JavaScript refers to a technique where a client repeatedly sends HTTP requests to a server at regular intervals to check for new data or updates.
+
+function startPolling() {
+  const secs = Math.max(5, parseInt(pollEl.value, 10) || 30);
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (!useDemo) fetchAndRender(endpointEl.value.trim());
+  }, secs * 1000);
+}
+pollEl.addEventListener('change', startPolling);
+startPolling();
+
+// Layout: circular packing by uptime magnitude and name
+function computeLayout(items) {
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const cx = w / 2;
+  const cy = h / 2;
+
+  // size = map uptime to radius: higher uptime -> larger bubble
+  const minR = 22, maxR = 72;
+  const radii = items.map(it => minR + (maxR - minR) * (it.uptime / 100));
+
+  // simple spiral placement to avoid complex physics packing
+  const bubbles = [];
+  let angle = 0;
+  let step = 40;
+  for (let i = 0; i < items.length; i++) {
+    const r = radii[i];
+    const distance = 40 + i * step * 0.9;
+    const x = cx + Math.cos(angle) * distance;
+    const y = cy + Math.sin(angle) * distance * 0.7;
+    bubbles.push({ x, y, r, data: items[i] });
+    angle += (Math.PI * 2) / (items.length || 1) * 0.8;
+  }
+
+  // basic overlap relaxation
+  for (let iter = 0; iter < 48; iter++) {
+    let moved = false;
+    for (let a = 0; a < bubbles.length; a++) {
+      for (let b = a+1; b < bubbles.length; b++) {
+        const A = bubbles[a], B = bubbles[b];
+        const dx = B.x - A.x, dy = B.y - A.y;
+        const dist = Math.hypot(dx, dy) || 0.001;
+        const minDist = A.r + B.r + 6; // padding
+        if (dist < minDist) {
+          const overlap = (minDist - dist) / 2;
+          const nx = dx / dist, ny = dy / dist;
+          A.x -= nx * overlap;
+          A.y -= ny * overlap;
+          B.x += nx * overlap;
+          B.y += ny * overlap;
+          moved = true;
+        }
+      }
+      // keep in bounds
+      A = bubbles[a];
+      A.x = Math.max(A.r + 8, Math.min(w - A.r - 8, A.x));
+      A.y = Math.max(A.r + 8, Math.min(h - A.r - 8, A.y));
+    }
+    if (!moved) break;
+  }
+
+  return { bubbles };
+}
+
+// Drawing
+function draw() {
+  resizeCanvas();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+
+  // background radial subtle
+  const bg = ctx.createLinearGradient(0,0,0,h);
+  bg.addColorStop(0,'rgba(255,255,255,0.02)');
+  bg.addColorStop(1,'rgba(255,255,255,0.00)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,w,h);
+
+  // draw each bubble
+  layout.bubbles.forEach((b, i) => {
+    const uptime = b.data.uptime;
+    const status = uptime >= 99 ? 'good' : (uptime >= 95 ? 'warn' : 'bad');
+    const color = status === 'good' ? '#16a34a' : (status === 'warn' ? '#f59e0b' : '#ef4444');
+
+    // shadow/glow
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 6, 0, Math.PI*2); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+
+    // outer ring
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = color; ctx.stroke();
+
+    // inner radial that indicates uptime (arc)
+    const start = -Math.PI/2;
+    const end = start + (Math.PI*2) * (uptime/100);
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 8, start, end, false);
+    ctx.lineWidth = 8; ctx.strokeStyle = color; ctx.stroke();
+
+    // text: uptime percentage
+    ctx.fillStyle = '#e6eef8';
+    ctx.font = '600 14px Inter, Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(uptime.toFixed(1) + '%', b.x, b.y - 4);
+
+    // name (wrap to two lines)
+    ctx.fillStyle = 'rgba(230,238,248,0.85)';
+    ctx.font = '400 12px Inter, Arial';
+    const name = b.data.name;
+    const nameLines = wrapText(ctx, name, b.r*1.6, 2);
+    nameLines.forEach((ln, idx) => {
+      ctx.fillText(ln, b.x, b.y + 14 + idx*14);
+    });
+
+    // highlight if hover or pinned
+    if (i === hoverIndex || (pinned && pinned.id === b.data.id)) {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 10, 0, Math.PI*2); ctx.closePath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  });
+
+  // tooltip
+  if (hoverIndex >= 0 && layout.bubbles[hoverIndex]) {
+    drawTooltip(layout.bubbles[hoverIndex]);
+  } else if (pinned) {
+    const b = layout.bubbles.find(x => x.data.id === pinned.id);
+    if (b) drawTooltip(b, true);
+  }
+}
+
+function wrapText(ctx, text, maxWidth, maxLines) {
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (let w of words) {
+    const test = cur ? (cur + ' ' + w) : w;
+    const m = ctx.measureText(test).width;
+    if (m > maxWidth && cur) {
+      lines.push(cur); cur = w;
+      if (lines.length >= maxLines) break;
+    } else cur = test;
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  return lines;
+}
+
+function drawTooltip(bubble, pinned=false) {
+  const pad = 10;
+  const txtLines = [];
+  txtLines.push(bubble.data.name + ' — ' + bubble.data.uptime.toFixed(2) + '%');
+  if (bubble.data.lastChecked) txtLines.push('Last: ' + new Date(bubble.data.lastChecked).toLocaleString());
+  if (bubble.data.notes) txtLines.push(bubble.data.notes);
+
+  ctx.font = '13px Inter, Arial';
+  const widths = txtLines.map(t => ctx.measureText(t).width);
+  const w = Math.max(...widths) + pad * 2;
+  const h = txtLines.length * 18 + pad * 2;
+
+  let x = bubble.x + bubble.r + 12;
+  let y = bubble.y - h/2;
+  if (x + w > canvas.clientWidth) x = bubble.x - bubble.r - 12 - w;
+  if (y < 8) y = 8;
+  if (y + h > canvas.clientHeight - 8) y = canvas.clientHeight - h - 8;
+
+  // box
+  ctx.beginPath(); roundedRect(ctx, x, y, w, h, 8); ctx.closePath();
+  ctx.fillStyle = 'rgba(2,6,23,0.85)'; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.stroke();
+
+  // text
+  ctx.fillStyle = '#e6eef8';
+  txtLines.forEach((t,i) => {
+    ctx.fillText(t, x + pad + 2, y + pad + 14 + i*18);
+  });
+
+  // small pin marker
+  if (pinned) {
+    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x + w - 14, y + 14, 6, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Interaction (hover & click)
+canvas.addEventListener('mousemove', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (ev.clientX - rect.left);
+  const y = (ev.clientY - rect.top);
+  let found = -1;
+  layout.bubbles.forEach((b, i)=>{
+    const d = Math.hypot(b.x - x, b.y - y);
+    if (d <= b.r + 6) found = i;
+  });
+  if (found !== hoverIndex) { hoverIndex = found; draw(); }
+});
+
+canvas.addEventListener('mouseleave', () => { hoverIndex = -1; draw(); });
+
+canvas.addEventListener('click', (ev) => {
+  if (hoverIndex >= 0) {
+    const b = layout.bubbles[hoverIndex];
+    if (pinned && pinned.id === b.data.id) pinned = null; else pinned = { id: b.data.id };
+    draw();
+  }
+});
+
+// simple hit test for touch
+canvas.addEventListener('touchstart', (ev)=>{
+  const t = ev.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const x = (t.clientX - rect.left);
+  const y = (t.clientY - rect.top);
+  let found = -1;
+  layout.bubbles.forEach((b, i)=>{ if (Math.hypot(b.x - x, b.y - y) <= b.r + 6) found = i });
+  if (found >= 0) {
+    const b = layout.bubbles[found];
+    pinned = { id: b.data.id };
+    draw();
+  }
+});
+
+// helper: update layout when data changes
+function refreshLayoutAndDraw() {
+  layout = computeLayout(data);
+  draw();
+}
+
+// initial demo
+fetchAndRenderDemo();
+
+// start periodic polling (reads useDemo state)
+setInterval(()=>{
+  if (!useDemo) { const url=endpointEl.value.trim(); if (url) fetchAndRender(url); }
+}, Math.max(10, parseInt(pollEl.value,10)||30) * 1000);
+
+</script>
+</body>
+</html>
