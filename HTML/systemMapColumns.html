@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
+  <meta charset="UTF-8" />
   <title></title>
   <style>
     body {
@@ -9,20 +9,56 @@
       justify-content: center;
       height: 100vh;
       margin: 0;
-      background: #666;
+      background: #29282e;
+      font-family: sans-serif;
+      color: white;
     }
+
+    h2, h3, p { margin: 0; padding: 0; }
+
+    p {
+      white-space: pre-line;
+      font-size: 13px;
+    }
+
     canvas {
-      border: 1px solid #666;
+      border: 1px solid #29282e;
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 1;
+    }
+
+    #container {
+      position: relative;
+      width: 1400px;
+      height: auto;
+      display: block;
+    }
+
+    .dynamic-box {
+      position: absolute;
+      background: #1e1d22;
+      padding: 8px;
+      color: white;
+      font-size: 14px;
+      border-radius: 5px;
+      box-sizing: border-box;
+      overflow: hidden;
     }
   </style>
 </head>
+
 <body>
-  <canvas id="diagram"></canvas>
+  <div id="container">
+    <canvas id="diagram"></canvas>
+  </div>
+
   <script>
     const config = {
       columns: [
         {
-          color: '#666',
+          color: '#29282e',
           boxes: [
             { id: 'server01', status: 'up' },
             { id: 'server02', status: 'up' },
@@ -30,7 +66,7 @@
           ]
         },
         {
-          color: '#666',
+          color: '#29282e',
           boxes: [
             { id: 'server11', status: 'up' },
             { id: 'server12', status: 'down' },
@@ -41,166 +77,194 @@
           ]
         },
         {
-          color: '#666',
+          color: '#29282e',
           boxes: [
             { id: 'server21', status: 'up' },
             { id: 'server22', status: 'up' }
-          ]
-        },
-        {
-          color: '#666',
-          boxes: [
-            { id: 'server31', status: 'up' }
           ]
         }
       ],
 
       connections: [
-        { from: 'server01', to: 'server11', color: '#9dc8dc' },
-        { from: 'server01', to: 'server12', color: '#f82300' },
-        { from: 'server01', to: 'server13', color: '#f82300' },
-        { from: 'server01', to: 'server14', color: '#f82300' },
+        { from: 'server01', to: 'server11', color: '#4c5e74' },
+        { from: 'server01', to: 'server12', color: '#ff5242' },
+        { from: 'server01', to: 'server13', color: '#ff5242' },
+        { from: 'server01', to: 'server14', color: '#ff5242' },
 
-        { from: 'server02', to: 'server15', color: '#f82300' },
-        { from: 'server03', to: 'server16', color: '#9dc8dc' },
+        { from: 'server02', to: 'server15', color: '#ff5242' },
 
-        { from: 'server11', to: 'server21', color: '#9dc8dc' },
-        { from: 'server11', to: 'server22', color: '#9dc8dc' },
-        { from: 'server12', to: 'server22', color: '#f82300' },
-        { from: 'server13', to: 'server22', color: '#f82300' },
-        { from: 'server16', to: 'server31', color: '#9dc8dc' }
+        { from: 'server11', to: 'server21', color: '#4c5e74' },
+        { from: 'server11', to: 'server22', color: '#4c5e74' },
+        { from: 'server12', to: 'server22', color: '#ff5242' },
+        { from: 'server13', to: 'server22', color: '#ff5242' },
       ],
 
       boxMargin: 12,
       baseBoxHeight: 150,
       lineSpacing: 40
-    }
+    };
 
-    const maxBoxes = Math.max(...config.columns.map(col => col.boxes.length))
-    const canvas = document.getElementById('diagram')
-    const ctx = canvas.getContext('2d')
-    canvas.width = 1400
-    canvas.height = maxBoxes * (config.baseBoxHeight + config.boxMargin * 2)
-    const width = canvas.width
-    const height = canvas.height
-    const colWidth = width / config.columns.length
-    const boxMap = {}
+    const maxBoxes = Math.max(...config.columns.map(col => col.boxes.length));
+    const canvas = document.getElementById('diagram');
+    const ctx = canvas.getContext('2d');
 
+    canvas.width = 1400;
+    canvas.height = maxBoxes * (config.baseBoxHeight + config.boxMargin * 2);
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const colWidth = width / config.columns.length;
+
+    const boxMap = {};
+
+    /* -----------------------------------------------------
+       LAYOUT COLUMNS + CREATE DIVs IN EXACT CANVAS POSITIONS
+    ------------------------------------------------------*/
     layoutColumns = () => {
+      const container = document.getElementById('container');
+      container.style.height = height + 'px';
+
       for (let colIndex = 0; colIndex < config.columns.length; colIndex++) {
-        const column = config.columns[colIndex]
-        ctx.fillStyle = column.color
-        ctx.fillRect(colWidth * colIndex, 0, colWidth, height)
-        const boxes = column.boxes
-        const boxHeight = height / maxBoxes
+        const column = config.columns[colIndex];
+        const boxes = column.boxes;
+
+        const boxHeight = height / maxBoxes;
+
         boxes.forEach((box, i) => {
-          const x = colWidth * colIndex + config.boxMargin
-          let y
+          const x = colWidth * colIndex + config.boxMargin;
+          let y;
+
           if (colIndex === 0) {
             if (i === 0) {
-              y = config.boxMargin
+              y = config.boxMargin;
             } else {
-              const indexFromBottom = boxes.length - i
-              const bottomStart = height - boxHeight + config.boxMargin
-              y = bottomStart - (indexFromBottom - 1) * boxHeight
+              const indexFromBottom = boxes.length - i;
+              const bottomStart = height - boxHeight + config.boxMargin;
+              y = bottomStart - (indexFromBottom - 1) * boxHeight;
             }
           } else {
-            y = i * boxHeight + config.boxMargin
+            y = i * boxHeight + config.boxMargin;
           }
-          const w = (colWidth - config.boxMargin * 2) * 0.70
-          const h = boxHeight - config.boxMargin * 2
-          boxMap[box.id] = { x, y, w, h, status: box.status, colIndex }
-        })
-      }
-    }
 
+          const w = (colWidth - config.boxMargin * 2) * 0.70;
+          const h = boxHeight - config.boxMargin * 2;
+
+          boxMap[box.id] = { x, y, w, h, status: box.status, colIndex };
+
+          /* ----- CREATE PERFECTLY ALIGNED DIV ----- */
+          const div = document.createElement('div');
+          div.className = 'dynamic-box';
+          div.id = `box-${box.id}`;
+          div.style.left = x + 'px';
+          div.style.top = y + 'px';
+          div.style.width = w + 'px';
+          div.style.height = h + 'px';
+          div.style.border = `4px solid ${box.status === 'down' ? '#ff5242' : '#4c5e74'}`;
+          div.style.zIndex = 10;
+
+          const title = document.createElement('h3');
+          title.textContent = box.id;
+
+          const details = document.createElement('p');
+          details.textContent = `Status: ${box.status}
+Column: ${colIndex + 1}
+Index: ${i}`;
+
+          div.appendChild(title);
+          div.appendChild(details);
+          container.appendChild(div);
+        });
+      }
+    };
+
+    /* ------------------ DRAW LINES ---------------------*/
     drawLines = () => {
-      ctx.lineWidth = 5
-      const maxLaneWidth = colWidth * 0.25
-      const sourceGroups = {}
+      ctx.lineWidth = 2;
+      const maxLaneWidth = colWidth * 0.25;
+
+      const sourceGroups = {};
+      config.connections.forEach(conn => (sourceGroups[conn.from] ||= []).push(conn));
+
+      Object.values(sourceGroups).forEach(conns => {
+        const count = conns.length;
+        conns.forEach((conn, idx) => {
+          const rev = count - idx;
+          conn._sourceCount = count;
+          conn._sourceIndex = idx;
+          conn._sourceLane = (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing);
+        });
+      });
+
+      const targetGroups = {};
+      config.connections.forEach(conn => (targetGroups[conn.to] ||= []).push(conn));
+
+      Object.values(targetGroups).forEach(conns => {
+        const count = conns.length;
+        conns.forEach((conn, idx) => {
+          const rev = count - idx;
+          conn._targetCount = count;
+          conn._targetIndex = idx;
+          conn._targetLane = (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing);
+        });
+      });
+
       config.connections.forEach(conn => {
-        (sourceGroups[conn.from] ||= []).push(conn)
-      })
-      Object.values(sourceGroups).forEach(list => {
-        const count = list.length
-        list.forEach((conn, idx) => {
-          const rev = count - idx
-          conn._sourceCount = count
-          conn._sourceIndex = idx
-          conn._sourceLane =
-            (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
-        })
-      })
-      const targetGroups = {}
-      config.connections.forEach(conn => {
-        (targetGroups[conn.to] ||= []).push(conn)
-      })
-      Object.values(targetGroups).forEach(list => {
-        const count = list.length
-        list.forEach((conn, idx) => {
-          const rev = count - idx
-          conn._targetCount = count
-          conn._targetIndex = idx
-          conn._targetLane =
-            (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
-        })
-      })
-      config.connections.forEach(conn => {
-        const startBox = boxMap[conn.from]
-        const endBox = boxMap[conn.to]
-        if (!startBox || !endBox) return
-        const startCol = startBox.colIndex
-        const endCol = endBox.colIndex
-        const count = conn._sourceCount
-        const idx = conn._sourceIndex
+        const startBox = boxMap[conn.from];
+        const endBox = boxMap[conn.to];
+
+        if (!startBox || !endBox) return;
+
+        const startCol = startBox.colIndex;
+        const endCol = endBox.colIndex;
+        const count = conn._sourceCount || 1;
+        const idx = conn._sourceIndex || 0;
+
         const start = {
           x: startBox.x + startBox.w,
-          y: startBox.y + (startBox.h / (count + 1)) * (idx + 1),
-        }
-        let endY
+          y: startBox.y + (startBox.h / (count + 1)) * (idx + 1)
+        };
+
+        let endY = endBox.y + endBox.h / 2;
         if (conn._targetCount > 1) {
-          const spacing = endBox.h / (conn._targetCount + 1)
-          endY = endBox.y + spacing * (conn._targetIndex + 1)
-        } else {
-          endY = endBox.y + endBox.h / 2
+          const spacing = endBox.h / (conn._targetCount + 1);
+          endY = endBox.y + spacing * (conn._targetIndex + 1);
         }
-        const end = { x: endBox.x, y: endY }
-        let midX
+
+        const end = { x: endBox.x, y: endY };
+        let midX;
+
         if (startCol === 0 && endCol === 1) {
-          midX = start.x + config.lineSpacing * conn._sourceLane
+          midX = start.x + config.lineSpacing * conn._sourceLane;
         } else if (startCol === 1 && endCol === 2) {
-          midX = end.x - config.lineSpacing * conn._targetLane
-        } else if (startCol === 1 && endCol === 3) {
-          const col3Right = colWidth * 3
-          const col4Left  = colWidth * 3
-          midX = (col3Right + col4Left) / 2
-          end.x = endBox.x
+          midX = end.x - config.lineSpacing * conn._targetLane;
         } else {
-          const dir = endCol > startCol ? 1 : -1
-          midX = start.x + dir * config.lineSpacing * (conn._sourceLane || 1)
+          const dir = endCol > startCol ? 1 : -1;
+          midX = start.x + dir * config.lineSpacing * (conn._sourceLane || 1);
         }
 
-        ctx.strokeStyle = conn.color || '#000'
-        ctx.beginPath()
-        ctx.moveTo(start.x, start.y)
-        ctx.lineTo(midX, start.y)
-        ctx.lineTo(midX, end.y)
-        ctx.lineTo(end.x, end.y)
-        ctx.stroke()
-      })
-    }
+        ctx.strokeStyle = conn.color || '#000';
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(midX, start.y);
+        ctx.lineTo(midX, end.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      });
+    };
 
+    /* ------------------- DRAW BOX BORDERS ------------------*/
     drawBoxesOnTop = () => {
       Object.values(boxMap).forEach(({ x, y, w, h, status }) => {
-        ctx.lineWidth = 10
-        ctx.strokeStyle = status === 'down' ? '#f82300' : '#9dc8dc'
-        ctx.strokeRect(x, y, w, h)
-      })
-    }
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = status === 'down' ? '#ff5242' : '#4c5e74';
+        ctx.strokeRect(x, y, w, h);
+      });
+    };
 
-    layoutColumns()
-    drawLines()
-    drawBoxesOnTop()
+    /* ------------------- EXECUTE ---------------------------*/
+    layoutColumns();
+    drawLines();
+    drawBoxesOnTop();
   </script>
 </body>
 </html>
