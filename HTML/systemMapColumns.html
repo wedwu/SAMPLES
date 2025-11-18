@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title></title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #666;
+    }
+    canvas {
+      border: 1px solid #666;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="diagram"></canvas>
+  <script>
+    const config = {
+      columns: [
+        {
+          color: '#666',
+          boxes: [ 
+            { id: 'server01', status: 'up' },
+            { id: 'server02', status: 'up' }
+          ]
+        },
+        {
+          color: '#666',
+          boxes: [
+            { id: 'server11', status: 'up' },
+            { id: 'server12', status: 'down' },
+            { id: 'server13', status: 'down' },
+            { id: 'server14', status: 'down' },
+            { id: 'server15', status: 'up' },
+            { id: 'server16', status: 'up' },
+            // { id: 'server17', status: 'down' },
+            // { id: 'server18', status: 'up' },
+
+          ]
+        },
+        {
+          color: '#666',
+          boxes: [
+            { id: 'server21', status: 'up' },
+            { id: 'server22', status: 'up' }
+          ]
+        }
+      ],
+      connections: [
+        { from: 'server01', to: 'server11', color: '#9dc8dc' },
+        { from: 'server01', to: 'server12', color: '#f82300' },
+        { from: 'server01', to: 'server13', color: '#f82300' },
+        { from: 'server01', to: 'server14', color: '#f82300' },
+        { from: 'server11', to: 'server21', color: '#9dc8dc' },
+        { from: 'server11', to: 'server22', color: '#9dc8dc' },
+        { from: 'server12', to: 'server22', color: '#f82300' },
+        { from: 'server13', to: 'server22', color: '#f82300' },
+      ],
+
+      boxMargin: 12,
+      baseBoxHeight: 150,
+      lineSpacing: 40
+    }
+
+    const maxBoxes = Math.max(...config.columns.map(col => col.boxes.length))
+    const canvas = document.getElementById('diagram')
+    const ctx = canvas.getContext('2d')
+    canvas.width = 1400
+    canvas.height = maxBoxes * (config.baseBoxHeight + config.boxMargin * 2)
+    const width = canvas.width
+    const height = canvas.height
+    const colWidth = width / config.columns.length
+
+    const boxMap = {}
+
+    layoutColumns = () => {
+      for (let colIndex = 0; colIndex < config.columns.length; colIndex++) {
+        const column = config.columns[colIndex]
+        // column background
+        ctx.fillStyle = column.color
+        ctx.fillRect(colWidth * colIndex, 0, colWidth, height)
+        const boxes = column.boxes
+        const boxHeight = height / maxBoxes
+
+        boxes.forEach((box, i) => {
+          const x = colWidth * colIndex + config.boxMargin
+          const y = i * boxHeight + config.boxMargin
+          const w = (colWidth - config.boxMargin * 2) * 0.70
+          const h = boxHeight - config.boxMargin * 2
+          const status = box.status
+          boxMap[box.id] = { x, y, w, h, status }
+        })
+      }
+    }
+
+    drawLines = () => {
+      ctx.lineWidth = 5
+      const grouped = {}
+      config.connections.forEach(c => {
+        if (!grouped[c.from]) grouped[c.from] = []
+        grouped[c.from].push(c)
+      })
+
+      Object.keys(grouped).forEach(sourceId => {
+        const connections = grouped[sourceId]
+        const startBox = boxMap[sourceId]
+        const count = connections.length
+        const maxLaneWidth = colWidth * 0.25
+        const laneOffsets = Array.from({ length: count }, (_, idx) => {
+          const rev = count - idx
+          return (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
+        })
+
+        connections.forEach((conn, i) => {
+          const endBox = boxMap[conn.to]
+          const start = {
+            x: startBox.x + startBox.w,
+            y: startBox.y + (startBox.h / (count + 1)) * (i + 1)
+          }
+          const end = {
+            x: endBox.x,
+            y: endBox.y + endBox.h / 2
+          }
+          const midX = start.x + config.lineSpacing * laneOffsets[i]
+          ctx.strokeStyle = conn.color || '#000'
+          ctx.beginPath()
+          ctx.moveTo(start.x, start.y)
+          ctx.lineTo(midX, start.y)
+          ctx.lineTo(midX, end.y)
+          ctx.lineTo(end.x, end.y)
+          ctx.stroke()
+        })
+      })
+    }
+
+    drawBoxesOnTop = () => {
+      Object.values(boxMap).forEach(({ x, y, w, h, status }) => {
+        ctx.fillStyle = 'transparent'
+        ctx.fillRect(x, y, w, h)
+        ctx.lineWidth = 10
+        ctx.strokeStyle = status === 'down' ? '#f82300' : '#9dc8dc'
+        ctx.strokeRect(x, y, w, h)
+      })
+    }
+
+    layoutColumns()
+    drawLines()
+    drawBoxesOnTop()
+
+  </script>
+</body>
+</html>
