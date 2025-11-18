@@ -25,7 +25,8 @@
           color: '#666',
           boxes: [ 
             { id: 'server01', status: 'up' },
-            { id: 'server02', status: 'up' }
+            { id: 'server02', status: 'up' },
+            { id: 'server03', status: 'up' },
           ]
         },
         {
@@ -39,7 +40,6 @@
             { id: 'server16', status: 'up' },
             // { id: 'server17', status: 'down' },
             // { id: 'server18', status: 'up' },
-
           ]
         },
         {
@@ -55,10 +55,13 @@
         { from: 'server01', to: 'server12', color: '#f82300' },
         { from: 'server01', to: 'server13', color: '#f82300' },
         { from: 'server01', to: 'server14', color: '#f82300' },
+        { from: 'server02', to: 'server15', color: '#f82300' },
+        { from: 'server03', to: 'server16', color: '#9dc8dc' },
         { from: 'server11', to: 'server21', color: '#9dc8dc' },
         { from: 'server11', to: 'server22', color: '#9dc8dc' },
         { from: 'server12', to: 'server22', color: '#f82300' },
         { from: 'server13', to: 'server22', color: '#f82300' },
+        { from: 'server16', to: 'server22', color: '#9dc8dc' },
       ],
 
       boxMargin: 12,
@@ -80,7 +83,6 @@
     layoutColumns = () => {
       for (let colIndex = 0; colIndex < config.columns.length; colIndex++) {
         const column = config.columns[colIndex]
-        // column background
         ctx.fillStyle = column.color
         ctx.fillRect(colWidth * colIndex, 0, colWidth, height)
         const boxes = column.boxes
@@ -88,7 +90,18 @@
 
         boxes.forEach((box, i) => {
           const x = colWidth * colIndex + config.boxMargin
-          const y = i * boxHeight + config.boxMargin
+          let y
+          if (colIndex === 0) {
+            if (i === 0) {
+              y = config.boxMargin
+            } else {
+              const indexFromBottom = boxes.length - i
+              const bottomStart = height - boxHeight + config.boxMargin
+              y = bottomStart - (indexFromBottom - 1) * boxHeight
+            }
+          } else {
+            y = i * boxHeight + config.boxMargin
+          }
           const w = (colWidth - config.boxMargin * 2) * 0.70
           const h = boxHeight - config.boxMargin * 2
           const status = box.status
