@@ -14,13 +14,6 @@
       color: white;
     }
 
-    h2, h3, p { margin: 0; padding: 0; }
-
-    p {
-      white-space: pre-line;
-      font-size: 13px;
-    }
-
     canvas {
       border: 1px solid #29282e;
       position: absolute;
@@ -45,6 +38,29 @@
       border-radius: 5px;
       box-sizing: border-box;
       overflow: hidden;
+      z-index: 10;
+    }
+
+    .elbow-icon {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ff5242;
+      border: 2px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+      z-index: 20;
+      transition: 0.15s ease-out;
+    }
+
+    .elbow-icon:hover {
+      transform: scale(1.25);
+      cursor: pointer;
     }
   </style>
 </head>
@@ -118,7 +134,7 @@
     const boxMap = {};
 
     /* -----------------------------------------------------
-       LAYOUT COLUMNS + CREATE DIVs IN EXACT CANVAS POSITIONS
+       LAYOUT COLUMNS + CREATE DIVs EXACTLY OVER CANVAS BOXES
     ------------------------------------------------------*/
     layoutColumns = () => {
       const container = document.getElementById('container');
@@ -151,7 +167,6 @@
 
           boxMap[box.id] = { x, y, w, h, status: box.status, colIndex };
 
-          /* ----- CREATE PERFECTLY ALIGNED DIV ----- */
           const div = document.createElement('div');
           div.className = 'dynamic-box';
           div.id = `box-${box.id}`;
@@ -160,7 +175,6 @@
           div.style.width = w + 'px';
           div.style.height = h + 'px';
           div.style.border = `4px solid ${box.status === 'down' ? '#ff5242' : '#4c5e74'}`;
-          div.style.zIndex = 10;
 
           const title = document.createElement('h3');
           title.textContent = box.id;
@@ -177,7 +191,9 @@ Index: ${i}`;
       }
     };
 
-    /* ------------------ DRAW LINES ---------------------*/
+    /* -----------------------------------------------------
+                       DRAW LINES + ELBOW ICON
+    ------------------------------------------------------*/
     drawLines = () => {
       ctx.lineWidth = 2;
       const maxLaneWidth = colWidth * 0.25;
@@ -249,10 +265,29 @@ Index: ${i}`;
         ctx.lineTo(midX, end.y);
         ctx.lineTo(end.x, end.y);
         ctx.stroke();
+
+        /* -----------------------
+           ADD ELBOW WARNING ICON
+        ------------------------*/
+        if (startBox.status === 'down' || endBox.status === 'down') {
+          const container = document.getElementById('container');
+
+          const elbow = document.createElement('div');
+          elbow.className = 'elbow-icon';
+          elbow.textContent = "⚠";
+
+          // Center the icon on the bend point
+          elbow.style.left = `${midX - 11}px`;
+          elbow.style.top = `${end.y - 11}px`;
+
+          container.appendChild(elbow);
+        }
       });
     };
 
-    /* ------------------- DRAW BOX BORDERS ------------------*/
+    /* -----------------------------------------------------
+                      DRAW CANVAS BOX BORDERS
+    ------------------------------------------------------*/
     drawBoxesOnTop = () => {
       Object.values(boxMap).forEach(({ x, y, w, h, status }) => {
         ctx.lineWidth = 10;
@@ -261,7 +296,7 @@ Index: ${i}`;
       });
     };
 
-    /* ------------------- EXECUTE ---------------------------*/
+    /* ------------------- INIT ---------------------------*/
     layoutColumns();
     drawLines();
     drawBoxesOnTop();
