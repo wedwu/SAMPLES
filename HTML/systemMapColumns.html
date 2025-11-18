@@ -23,7 +23,7 @@
       columns: [
         {
           color: '#666',
-          boxes: [ 
+          boxes: [
             { id: 'server01', status: 'up' },
             { id: 'server02', status: 'up' },
             { id: 'server03', status: 'up' },
@@ -37,9 +37,7 @@
             { id: 'server13', status: 'down' },
             { id: 'server14', status: 'down' },
             { id: 'server15', status: 'up' },
-            { id: 'server16', status: 'up' },
-            // { id: 'server17', status: 'down' },
-            // { id: 'server18', status: 'up' },
+            { id: 'server16', status: 'up' }
           ]
         },
         {
@@ -50,18 +48,21 @@
           ]
         }
       ],
+
       connections: [
         { from: 'server01', to: 'server11', color: '#9dc8dc' },
         { from: 'server01', to: 'server12', color: '#f82300' },
         { from: 'server01', to: 'server13', color: '#f82300' },
         { from: 'server01', to: 'server14', color: '#f82300' },
+
         { from: 'server02', to: 'server15', color: '#f82300' },
         { from: 'server03', to: 'server16', color: '#9dc8dc' },
+
         { from: 'server11', to: 'server21', color: '#9dc8dc' },
         { from: 'server11', to: 'server22', color: '#9dc8dc' },
         { from: 'server12', to: 'server22', color: '#f82300' },
         { from: 'server13', to: 'server22', color: '#f82300' },
-        { from: 'server16', to: 'server22', color: '#9dc8dc' },
+        { from: 'server16', to: 'server22', color: '#9dc8dc' }
       ],
 
       boxMargin: 12,
@@ -72,8 +73,10 @@
     const maxBoxes = Math.max(...config.columns.map(col => col.boxes.length))
     const canvas = document.getElementById('diagram')
     const ctx = canvas.getContext('2d')
+
     canvas.width = 1400
     canvas.height = maxBoxes * (config.baseBoxHeight + config.boxMargin * 2)
+
     const width = canvas.width
     const height = canvas.height
     const colWidth = width / config.columns.length
@@ -85,12 +88,14 @@
         const column = config.columns[colIndex]
         ctx.fillStyle = column.color
         ctx.fillRect(colWidth * colIndex, 0, colWidth, height)
+
         const boxes = column.boxes
         const boxHeight = height / maxBoxes
 
         boxes.forEach((box, i) => {
           const x = colWidth * colIndex + config.boxMargin
           let y
+
           if (colIndex === 0) {
             if (i === 0) {
               y = config.boxMargin
@@ -102,51 +107,84 @@
           } else {
             y = i * boxHeight + config.boxMargin
           }
+
           const w = (colWidth - config.boxMargin * 2) * 0.70
           const h = boxHeight - config.boxMargin * 2
-          const status = box.status
-          boxMap[box.id] = { x, y, w, h, status }
+
+          boxMap[box.id] = { x, y, w, h, status: box.status, colIndex }
         })
       }
     }
 
     drawLines = () => {
       ctx.lineWidth = 5
-      const grouped = {}
-      config.connections.forEach(c => {
-        if (!grouped[c.from]) grouped[c.from] = []
-        grouped[c.from].push(c)
+      const maxLaneWidth = colWidth * 0.25
+      const sourceGroups = {}
+      config.connections.forEach(conn => (sourceGroups[conn.from] ||= []).push(conn))
+
+      Object.values(sourceGroups).forEach(conns => {
+        const count = conns.length
+        conns.forEach((conn, idx) => {
+          const rev = count - idx
+          conn._sourceCount = count
+          conn._sourceIndex = idx
+          conn._sourceLane = (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
+        })
       })
 
-      Object.keys(grouped).forEach(sourceId => {
-        const connections = grouped[sourceId]
-        const startBox = boxMap[sourceId]
-        const count = connections.length
-        const maxLaneWidth = colWidth * 0.25
-        const laneOffsets = Array.from({ length: count }, (_, idx) => {
-          const rev = count - idx
-          return (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
-        })
+      const targetGroups = {}
+      config.connections.forEach(conn => {
+        (targetGroups[conn.to] ||= []).push(conn)
+      })
 
-        connections.forEach((conn, i) => {
-          const endBox = boxMap[conn.to]
-          const start = {
-            x: startBox.x + startBox.w,
-            y: startBox.y + (startBox.h / (count + 1)) * (i + 1)
-          }
-          const end = {
-            x: endBox.x,
-            y: endBox.y + endBox.h / 2
-          }
-          const midX = start.x + config.lineSpacing * laneOffsets[i]
-          ctx.strokeStyle = conn.color || '#000'
-          ctx.beginPath()
-          ctx.moveTo(start.x, start.y)
-          ctx.lineTo(midX, start.y)
-          ctx.lineTo(midX, end.y)
-          ctx.lineTo(end.x, end.y)
-          ctx.stroke()
+      Object.values(targetGroups).forEach(conns => {
+        const count = conns.length
+        conns.forEach((conn, idx) => {
+          const rev = count - idx
+          conn._targetCount = count
+          conn._targetIndex = idx
+          conn._targetLane = (rev / (count + 1)) * (maxLaneWidth / config.lineSpacing)
         })
+      })
+
+      config.connections.forEach(conn => {
+        const startBox = boxMap[conn.from]
+        const endBox = boxMap[conn.to]
+
+        if (!startBox || !endBox) return
+
+        const startCol = startBox.colIndex
+        const endCol = endBox.colIndex
+        const count = conn._sourceCount || 1
+        const idx = conn._sourceIndex || 0
+        const start = {
+          x: startBox.x + startBox.w,
+          y: startBox.y + (startBox.h / (count + 1)) * (idx + 1)
+        }
+
+        let endY = endBox.y + endBox.h / 2
+        if (conn._targetCount > 1) {
+          const spacing = endBox.h / (conn._targetCount + 1)
+          endY = endBox.y + spacing * (conn._targetIndex + 1)
+        }
+        const end = { x: endBox.x, y: endY }
+        let midX
+        if (startCol === 0 && endCol === 1) {
+          midX = start.x + config.lineSpacing * conn._sourceLane
+        } else if (startCol === 1 && endCol === 2) {
+          midX = end.x - config.lineSpacing * conn._targetLane
+        } else {
+          const dir = endCol > startCol ? 1 : -1
+          midX = start.x + dir * config.lineSpacing * (conn._sourceLane || 1)
+        }
+
+        ctx.strokeStyle = conn.color || '#000'
+        ctx.beginPath()
+        ctx.moveTo(start.x, start.y)
+        ctx.lineTo(midX, start.y)
+        ctx.lineTo(midX, end.y)
+        ctx.lineTo(end.x, end.y)
+        ctx.stroke()
       })
     }
 
@@ -154,6 +192,7 @@
       Object.values(boxMap).forEach(({ x, y, w, h, status }) => {
         ctx.fillStyle = 'transparent'
         ctx.fillRect(x, y, w, h)
+
         ctx.lineWidth = 10
         ctx.strokeStyle = status === 'down' ? '#f82300' : '#9dc8dc'
         ctx.strokeRect(x, y, w, h)
@@ -163,7 +202,6 @@
     layoutColumns()
     drawLines()
     drawBoxesOnTop()
-
   </script>
 </body>
 </html>
